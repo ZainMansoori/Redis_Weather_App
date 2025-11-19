@@ -2,8 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
-from app.api.routes import router as api_router
-from app.config import get_settings
+from app.routes.weather_routes import router as api_router
+from app.configuration import get_settings
+
+from app.models.sql_models import Base
 
 # Configure logging
 logging.basicConfig(
@@ -13,6 +15,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
 
 # Create FastAPI app
 app = FastAPI(
