@@ -8,9 +8,9 @@ from rq import Queue
 from sqlalchemy.orm import Session
 
 from app.configuration import get_settings
-from app.constants import JOB_TIMEOUT, QUEUE_NAME
 from app.database import SessionLocal
 from app.models import JobHistory, JobStatus, JobTrigger
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,6 +19,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+QUEUE_NAME = "weather-jobs"
+JOB_TIMEOUT = "5m"
 
 
 def create_scheduled_job(queue: Queue, db_session: Session):

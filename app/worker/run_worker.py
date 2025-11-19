@@ -4,7 +4,7 @@ from redis import Redis
 from rq import Connection, Worker
 
 from app.configuration import get_settings
-from app.constants import QUEUE_NAME
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
+
+QUEUE_NAME = "weather-jobs"
 
 def main():
     """Run RQ worker"""

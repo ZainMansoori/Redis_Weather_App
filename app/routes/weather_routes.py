@@ -8,7 +8,6 @@ import logging
 
 from app.database import get_db
 from app.configuration import get_settings
-from app.constants import JOB_TIMEOUT, QUEUE_NAME
 from app.models import WeatherData, JobHistory, JobStatus, JobTrigger
 from app.schema import (
     JobCreate, 
@@ -22,6 +21,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 settings = get_settings()
 
+
+QUEUE_NAME = "weather-jobs"
+JOB_TIMEOUT = "5m"
 
 def get_redis_queue():
     """Get Redis Queue instance"""
