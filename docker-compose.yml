@@ -1,0 +1,78 @@
+services:
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: weather-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - weather-network
+
+  # FastAPI Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: weather-api
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - weather_cache:/app/.cache
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - weather-network
+
+  # Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: weather-worker
+    command: python worker/run_worker.py
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - weather_cache:/app/.cache
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - weather-network
+    restart: unless-stopped
+
+  # Producer (Scheduler)
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: weather-producer
+    command: python producer/scheduler.py
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - weather-network
+    restart: unless-stopped
+
+networks:
+  weather-network:
+    driver: bridge
+
+volumes:
+  weather_cache:
