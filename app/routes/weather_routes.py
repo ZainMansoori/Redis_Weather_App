@@ -8,6 +8,7 @@ import logging
 
 from app.database import get_db
 from app.configuration import get_settings
+from app.constants import JOB_TIMEOUT, QUEUE_NAME
 from app.models import WeatherData, JobHistory, JobStatus, JobTrigger
 from app.schema import (
     JobCreate, 
@@ -25,7 +26,7 @@ settings = get_settings()
 def get_redis_queue():
     """Get Redis Queue instance"""
     redis_conn = Redis.from_url(settings.REDIS_URL)
-    return Queue(connection=redis_conn)
+    return Queue(name=QUEUE_NAME, connection=redis_conn)
 
 
 @router.post("/job", response_model=JobResponse)
@@ -55,9 +56,9 @@ async def create_weather_job(
         
         # Enqueue job
         job = queue.enqueue(
-            'worker.worker.fetch_and_store_weather',
+            "app.worker.rq_worker.fetch_and_store_weather",
             cities_to_fetch,
-            job_timeout='5m'
+            job_timeout=JOB_TIMEOUT,
         )
         
         # Create job history record

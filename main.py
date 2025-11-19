@@ -1,11 +1,13 @@
+import logging
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import logging
+from fastapi.staticfiles import StaticFiles
 
-from app.routes.weather_routes import router as api_router
 from app.configuration import get_settings
-
-from app.models.sql_models import Base
+from app.routes.page_routes import router as page_router
+from app.routes.weather_routes import router as api_router
 
 # Configure logging
 logging.basicConfig(
@@ -15,34 +17,47 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "app" / "static"
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in settings.ALLOWED_ORIGINS.split(",")
+    if origin.strip()
+]
 
 # Create FastAPI app
 app = FastAPI(
     title="Weather API",
-    description="Background job-based weather data fetching system",
-    version="1.0.0"
+    description="Redis-backed weather data pipeline with scheduling & worker",
+    version="1.0.0",
 )
 
 # Configure CORS
+allow_origins = ALLOWED_ORIGINS or ["*"]
+allow_credentials = False if "*" in allow_origins else True
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
+    allow_origins=allow_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include API routes
+# Static assets & routers
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.include_router(page_router)
 app.include_router(api_router, prefix="/api")
 
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting Weather API service...")
-    logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1]}")  # Log without credentials
-    logger.info(f"Redis: {settings.REDIS_URL.split('@')[-1]}")
+    db_target = settings.DATABASE_URL.rsplit("@", maxsplit=1)[-1]
+    redis_target = settings.REDIS_URL.rsplit("@", maxsplit=1)[-1]
+    logger.info("Starting Weather API service...")
+    logger.info("Database: %s", db_target)
+    logger.info("Redis: %s", redis_target)
 
 
 @app.on_event("shutdown")
@@ -50,25 +65,10 @@ async def shutdown_event():
     logger.info("Shutting down Weather API service...")
 
 
-@app.get("/")
-async def root():
-    return {
-        "message": "Weather API Service",
-        "version": "1.0.0",
-        "endpoints": {
-            "api_docs": "/docs",
-            "health": "/api/health",
-            "create_job": "POST /api/job",
-            "get_weather": "GET /api/weather",
-            "get_jobs": "GET /api/jobs"
-        }
-    }
-
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "app.main:app",
+        "main:app",
         host=settings.API_HOST,
         port=settings.API_PORT,
         reload=True

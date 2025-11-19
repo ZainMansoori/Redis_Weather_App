@@ -1,17 +1,14 @@
-import sys
-import os
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from redis import Redis
-from rq import Queue
 import logging
 import time
 from datetime import datetime
+from typing import Dict
+
+from redis import Redis
+from rq import Queue
+from sqlalchemy.orm import Session
 
 from app.configuration import get_settings
+from app.constants import JOB_TIMEOUT, QUEUE_NAME
 from app.database import SessionLocal
 from app.models import JobHistory, JobStatus, JobTrigger
 
@@ -24,21 +21,21 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-def create_scheduled_job(queue: Queue, db_session: SessionLocal):
+def create_scheduled_job(queue: Queue, db_session: Session):
     """
     Create a scheduled job to fetch weather data for all standard cities.
     """
     try:
         # Get all cities configuration
-        cities_to_fetch = settings.CITIES.copy()
+        cities_to_fetch: Dict[str, Dict[str, float]] = settings.CITIES.copy()
         
         logger.info(f"Creating scheduled job for cities: {list(cities_to_fetch.keys())}")
         
         # Enqueue job
         job = queue.enqueue(
-            'worker.worker.fetch_and_store_weather',
+            "app.worker.rq_worker.fetch_and_store_weather",
             cities_to_fetch,
-            job_timeout='5m'
+            job_timeout=JOB_TIMEOUT,
         )
         
         # Create job history record
@@ -64,14 +61,15 @@ def main():
     Main scheduler loop.
     Creates a new weather fetch job every 60 seconds.
     """
+    interval = settings.SCHEDULER_INTERVAL_SECONDS
     logger.info("Starting Weather Job Scheduler...")
-    logger.info(f"Schedule: Every 60 seconds")
+    logger.info("Schedule: every %s seconds", interval)
     logger.info(f"Cities: {', '.join(settings.CITIES.keys())}")
     logger.info(f"Connecting to Redis: {settings.REDIS_URL.split('@')[-1]}")
     
     # Connect to Redis
     redis_conn = Redis.from_url(settings.REDIS_URL)
-    queue = Queue(connection=redis_conn)
+    queue = Queue(name=QUEUE_NAME, connection=redis_conn)
     
     # Database session
     db = SessionLocal()
@@ -88,12 +86,12 @@ def main():
             job_id = create_scheduled_job(queue, db)
             
             if job_id:
-                logger.info(f"Next job scheduled in 60 seconds...")
+                logger.info("Next job scheduled in %s seconds...", interval)
             else:
-                logger.warning(f"Failed to create job, will retry in 60 seconds...")
+                logger.warning("Failed to create job, will retry in %s seconds...", interval)
             
-            # Wait 60 seconds before next job
-            time.sleep(60)
+            # Wait before next job
+            time.sleep(interval)
             
     except KeyboardInterrupt:
         logger.info("Scheduler stopped by user")

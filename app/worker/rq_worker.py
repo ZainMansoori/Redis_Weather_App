@@ -1,20 +1,14 @@
-import sys
-import os
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from sqlalchemy.orm import Session
-from sqlalchemy.dialects.postgresql import insert
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 from typing import Dict
+
 from rq import get_current_job
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import WeatherData, JobHistory, JobStatus
-from app.service.weather_service import WeatherService
+from app.models import JobHistory, JobStatus, WeatherData
+from app.service.weather_service import WeatherResult, WeatherService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,7 +17,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def fetch_and_store_weather(cities_config: Dict[str, Dict]):
+def fetch_and_store_weather(cities_config: Dict[str, Dict[str, float]]):
     """
     Worker task to fetch weather data for multiple cities and store in database.
     Implements retry logic for failed cities (up to 3 attempts per city).
@@ -37,6 +31,7 @@ def fetch_and_store_weather(cities_config: Dict[str, Dict]):
     logger.info(f"[Job {job_id}] Starting weather fetch for {len(cities_config)} cities")
     
     db: Session = SessionLocal()
+    job_record = None
     
     try:
         # Update job status to processing
@@ -99,7 +94,7 @@ def fetch_and_store_weather(cities_config: Dict[str, Dict]):
         
         # Update job status
         if job_record:
-            job_record.completed_at = datetime.utcnow()
+            job_record.completed_at = datetime.now(timezone.utc)
             
             if failed_cities:
                 job_record.status = JobStatus.FAILED
@@ -123,7 +118,7 @@ def fetch_and_store_weather(cities_config: Dict[str, Dict]):
         # Update job status to failed
         if job_record:
             job_record.status = JobStatus.FAILED
-            job_record.completed_at = datetime.utcnow()
+            job_record.completed_at = datetime.now(timezone.utc)
             job_record.error_message = str(e)[:500]
             db.commit()
         
@@ -134,10 +129,10 @@ def fetch_and_store_weather(cities_config: Dict[str, Dict]):
 
 
 def upsert_weather_data(
-    db: Session, 
-    city_name: str, 
-    coords: Dict, 
-    weather_data: Dict
+    db: Session,
+    city_name: str,
+    coords: Dict[str, float],
+    weather_data: WeatherResult,
 ):
     """
     Upsert weather data for a city (insert or update if exists).

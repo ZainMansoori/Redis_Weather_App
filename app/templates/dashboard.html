@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Weather Jobs Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <h1>Weather Jobs Dashboard</h1>
+        <nav>
+          <a href="/">Dashboard</a>
+          <a href="/weather">Weather Data</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <div class="card-header">
+          <h2>Manual Weather Fetch</h2>
+          <button id="fetchBtn" class="primary">Fetch Weather Now</button>
+        </div>
+        <p class="muted">
+          Clicking the button enqueues a job in Redis. The worker fetches the
+          latest weather for London, New York, Tokyo, and Cairo.
+        </p>
+        <p id="jobStatus" class="status"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Recent Job History</h2>
+          <span class="muted">Latest 20 jobs (manual + scheduled)</span>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Job ID</th>
+                <th>Trigger</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Completed</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if jobs %}
+              {% for job in jobs %}
+              <tr>
+                <td class="mono">{{ job.job_id }}</td>
+                <td>{{ job.trigger.value|capitalize }}</td>
+                <td>
+                  <span class="badge {{ job.status.value }}">
+                    {{ job.status.value|capitalize }}
+                  </span>
+                </td>
+                <td>{{ job.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+                <td>
+                  {% if job.completed_at %}
+                  {{ job.completed_at.strftime("%Y-%m-%d %H:%M:%S") }}
+                  {% else %}
+                  —
+                  {% endif %}
+                </td>
+                <td class="muted">
+                  {{ job.error_message if job.error_message else "—" }}
+                </td>
+              </tr>
+              {% endfor %}
+              {% else %}
+              <tr>
+                <td colspan="6" class="muted center">
+                  No jobs have been run yet.
+                </td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const fetchBtn = document.getElementById("fetchBtn");
+      const statusEl = document.getElementById("jobStatus");
+
+      async function enqueueJob() {
+        statusEl.textContent = "Submitting job...";
+        statusEl.classList.remove("error", "success");
+
+        try {
+          const response = await fetch("/api/job", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({}),
+          });
+
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+
+          const data = await response.json();
+          statusEl.textContent = `Job ${data.job_id} queued (${data.status}).`;
+          statusEl.classList.add("success");
+          setTimeout(() => window.location.reload(), 1500);
+        } catch (error) {
+          statusEl.textContent =
+            "Unable to queue job. Check logs and try again.";
+          statusEl.classList.add("error");
+        }
+      }
+
+      if (fetchBtn) {
+        fetchBtn.addEventListener("click", enqueueJob);
+      }
+    </script>
+  </body>
+</html>
+

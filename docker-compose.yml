@@ -1,5 +1,4 @@
 services:
-  # Redis
   redis:
     image: redis:7-alpine
     container_name: weather-redis
@@ -13,7 +12,6 @@ services:
     networks:
       - weather-network
 
-  # FastAPI Application
   app:
     build:
       context: .
@@ -33,13 +31,12 @@ services:
     networks:
       - weather-network
 
-  # Worker
   worker:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: weather-worker
-    command: python worker/run_worker.py
+    command: python -m app.worker.run_worker
     env_file:
       - .env
     volumes:
@@ -52,13 +49,12 @@ services:
       - weather-network
     restart: unless-stopped
 
-  # Producer (Scheduler)
   producer:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: weather-producer
-    command: python producer/scheduler.py
+    command: python -m app.producer.schedule
     env_file:
       - .env
     volumes:

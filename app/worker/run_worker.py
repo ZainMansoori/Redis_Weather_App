@@ -1,15 +1,10 @@
-import sys
-import os
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from redis import Redis
-from rq import Worker, Queue, Connection
 import logging
 
+from redis import Redis
+from rq import Connection, Worker
+
 from app.configuration import get_settings
+from app.constants import QUEUE_NAME
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,10 +21,10 @@ def main():
     logger.info(f"Connecting to Redis: {settings.REDIS_URL.split('@')[-1]}")
     
     redis_conn = Redis.from_url(settings.REDIS_URL)
-    
+
     with Connection(redis_conn):
-        worker = Worker(['default'], connection=redis_conn)
-        logger.info("Worker started and listening for jobs...")
+        worker = Worker([QUEUE_NAME], connection=redis_conn)
+        logger.info("Worker listening on queue '%s'...", QUEUE_NAME)
         worker.work(with_scheduler=False)
 
 
